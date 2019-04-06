@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FSharpLintSettings>
+    <Analysers>
+        <NameConventions>
+        <!-- https://github.com/fsprojects/FSharpLint/blob/master/src/FSharpLint.Core/DefaultConfiguration.FSharpLint#L142 -->
+            <Rules>
+                <MemberNames>
+                    <!-- justification: javascript conventions -->
+                    <Enabled>False</Enabled>
+                </MemberNames>
+            </Rules>
+        </NameConventions>
+        <Formatting>
+            <Rules>
+                <TypePrefixing><Enabled>False</Enabled></TypePrefixing>
+                <PatternMatchClauseIndentation><Enabled>False</Enabled></PatternMatchClauseIndentation>
+                <PatternMatchExpressionIndentation><Enabled>False</Enabled></PatternMatchExpressionIndentation>
+                <RulesFormattingMatchExpressionIndentationError>
+                    <Enabled>False</Enabled>
+                </RulesFormattingMatchExpressionIndentationError>
+                <RulesFormattingPatternMatchClauseSameIndentationError>
+                    <Enabled>False</Enabled>
+                </RulesFormattingPatternMatchClauseSameIndentationError>
+                <TupleParentheses><Enabled>False</Enabled></TupleParentheses>
+                <TupleCommaSpacing><Enabled>False</Enabled></TupleCommaSpacing>
+            </Rules>
+        </Formatting>
+    </Analysers>
+    <IgnoreFiles Update="Add">
+        <![CDATA[
+            Fable.Import.*
+        ]]>
+    </IgnoreFiles>
+</FSharpLintSettings>
