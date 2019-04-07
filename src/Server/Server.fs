@@ -9,7 +9,11 @@ open Microsoft.Extensions.DependencyInjection
 
 open FSharp.Control.Tasks.V2
 open Giraffe
+
+
 open Shared
+open Shared.StringPatterns
+open System.Net.Sockets
 
 
 let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
@@ -18,13 +22,47 @@ let publicPath = Path.GetFullPath "../Client/public"
 let port = "SERVER_PORT" |> tryGetEnv |> Option.map uint16 |> Option.defaultValue 8065us
 
 let getInitCounter () : Task<Counter> = task { return { Value = 42 } }
+let getPing port : Task<PingStatus> = task {
+    use tcp = new TcpClient()
+    printfn "Checking port %i" port
+    try
+        tcp.Connect("127.0.0.1", port)
+        return {Port=port;PortStatus="Open"}
+    with ex ->
+        return {Port=port;PortStatus=ex.Message}
+
+}
 let webApp =
-    route "/api/init" >=>
+    let printPart msg:HttpHandler= warbler (fun _ next ctx -> printfn "%s" msg; Task.FromResult None )
+    let pingHandler:HttpHandler =
         fun next ctx ->
-            task {
-                let! counter = getInitCounter()
-                return! Successful.OK counter next ctx
-            }
+            printfn "checking for port"
+            match ctx.GetQueryStringValue "port" with
+            | Ok (ParseInt port) ->
+                task{
+                    let! pingResult = getPing port
+                    return! Successful.OK pingResult next ctx
+                }
+            | Error ex ->
+                ServerErrors.INTERNAL_ERROR ex next ctx
+            | Ok x ->
+                ServerErrors.INTERNAL_ERROR x next ctx
+    choose [
+        route "/api/hello" >=> text "hi"
+        route "/api/init" >=>
+            fun next ctx ->
+                task {
+                    let! counter = getInitCounter()
+                    return! Successful.OK counter next ctx
+                }
+        // route "/hello" >=> printPart "world"
+        route "/api/ping"
+            >=> responseCaching (Public (TimeSpan.FromSeconds 2.0)) None (Some [| "port" |])
+            // >=> warbler (fun (next,ctx) -> ServerErrors.INTERNAL_ERROR "warbled")
+            >=> warbler (fun _ -> printfn "warbling!"; pingHandler)
+            // warbler (fun (_,ctx) next -> pingHandler (next ctx) ctx))
+        ServerErrors.NOT_IMPLEMENTED ()
+    ]
 
 let configureApp (app : IApplicationBuilder) =
     app.UseDefaultFiles()
