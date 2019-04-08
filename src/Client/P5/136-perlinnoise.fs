@@ -14,6 +14,8 @@ let P5_136() =
         printfn "Setup is running"
         sk.createCanvas 600 600
         slider <- sk.createSlider(0.0,10.0,0.0,0.1)
+        Browser.window?slider <- slider
+        slider.value 5.0
         sk.noiseSeed(System.Random().Next())
         phase <- 0.0
         zoff <- 0.0

@@ -39,8 +39,8 @@ type Star(fSpeed, width,height,?seedOpt) =
 
 let p5_001() =
     let w,h = 800,800
-    let count = 100
-    let stars = Array.zeroCreate 800
+    let count = 800
+    let stars = Array.zeroCreate count
 
     let mutable speed = 15.0
     let setup (sk:ISketch) =

@@ -62,6 +62,7 @@ type ISketchCore =
 [<AllowNullLiteral>]
 type ISlider =
     abstract member value:unit -> float
+    abstract member value:float -> unit
 [<AllowNullLiteral>]
 type ISketchDom = // addOn
         abstract member createSlider: min:float*max:float*value:float*step:float -> ISlider
