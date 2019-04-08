@@ -30,9 +30,12 @@ type Sketch =
     abstract member beginShape: unit -> unit
     abstract member vertex: x:float * y:float-> unit
     abstract member endShape: unit -> unit
+    abstract member endShape: string -> unit
     abstract member width: float with get,set
     abstract member height: float with get,set
     abstract member TWO_PI:float
+    abstract member CLOSE:string
+    abstract member noLoop: unit -> unit
 
 [<Emit("new p5($0)")>]
 let private p5(sk:Sketch -> unit):obj = jsNative
@@ -83,7 +86,7 @@ module Sample =
             sk.stroke 255
             sk.noFill()
             sk.beginShape()
-            [0.0 .. 0.01 .. sk.TWO_PI]
+            [0.0 .. 0.1 .. sk.TWO_PI]
             |> Seq.iter(fun a ->
                 let r = float <| System.Random().Next(50,100)
                 let x:float = r * System.Math.Cos(a)
@@ -91,7 +94,8 @@ module Sample =
                 sk.vertex(x,y)
                 ()
             )
-            sk.endShape()
+            sk.endShape(sk.CLOSE)
+            // sk.noLoop()
         SketchWrapper(setup, draw)
 
 
