@@ -28,7 +28,7 @@ type ISketchCore =
     abstract member canvas: ICanvas
 
     abstract member cos:float -> float
-    abstract member createCanvas: x:int -> width:int -> unit
+    abstract member createCanvas: w:int -> h:int -> unit
     abstract member background: color:int -> unit
     abstract member draw:unit -> unit
     abstract member fill: color:int -> unit
@@ -42,12 +42,15 @@ type ISketchCore =
     abstract member endShape: string -> unit
     abstract member map: n:float * start1:float * stop1:float * start2:float * stop2:float -> float
     abstract member map: n:float * start1:float * stop1:float * start2:float * stop2:float * withinBounds:bool -> float
-    abstract member noFill: unit -> unit
-    abstract member noLoop: unit -> unit
     abstract member noise: float -> float
     abstract member noise: x:float*y:float -> float
     abstract member noise: x:float*y:float*z:float -> float
     abstract member noiseSeed:int -> unit
+
+    abstract member noFill: unit -> unit
+    abstract member noLoop: unit -> unit
+    abstract member noStroke: unit -> unit
+    abstract member ellipse: x:float * y:float * w:float * h:float * ?detailX :float -> unit
 
     abstract member redraw: unit -> unit
     abstract member sin:float -> float

@@ -40,6 +40,7 @@ module Run =
         |> ignore<Browser.Node>
     )
     let models = [
+        "001-starfield", P5.Starfield.p5_001
         "136-perlinnoise", P5.PerlinNoise.P5_136
     ]
 
@@ -50,13 +51,18 @@ module Run =
 
         let hasModel,fSketchOpt =
             // hack attempt to dispose previous drawing
+
             match model.Index with
             | null | "home" ->
                 Some P5.Sample.P5_0
-            | "136-perlinnoise" ->
-                printfn "Doing perlin noise"
-                Some P5.PerlinNoise.P5_136
-            | _ -> None
+            | i ->
+                models
+
+                |> List.tryFind(fst>> (=) i)
+                |> function
+                    |Some (_,f) ->
+                        Some f
+                    | None -> None
             |> function
                 | None -> false,None
                 | Some x -> true,Some x
