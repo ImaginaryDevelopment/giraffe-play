@@ -28,7 +28,17 @@ module P5Impl =
     let cleanUp() =
         SketchWrapper.CleanUp()
 module Run =
+    let initP5 = lazy(
+        let e = Browser.document.createElement("script")
+        // s?type <- "text/javascript"
+        e?src<-"https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.7.3/p5.js"
+        Browser.document.body.appendChild(e)
+        |> ignore<Browser.Node>
+
+    )
     let view model (dispatch:Msg->unit) =
+        initP5.Value
+
         let hasModel =
             // hack attempt to dispose previous drawing
             if Browser.window?index <> model.Index then
