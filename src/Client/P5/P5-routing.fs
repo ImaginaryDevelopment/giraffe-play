@@ -10,6 +10,8 @@ open Fable.PowerPack.Fetch
 
 open Fulma
 open P5
+open Fable.Import
+open Fable.Import.JS
 
 // allow for non-challenge indexes
 type Model = {Index:string;Sketch:SketchWrapper option}
@@ -37,39 +39,34 @@ module Run =
 
     )
     let view model (dispatch:Msg->unit) =
-        initP5.Value
+        let hadValue = initP5.IsValueCreated
+        initP5.Force()
 
-        let hasModel =
+        let hasModel,fSketchOpt =
             // hack attempt to dispose previous drawing
             if Browser.window?index <> model.Index then
                 match model.Index with
                 | null | "" | "0" ->
                     Some P5.Sample.P5_0
                 | "136-perlinnoise" ->
-                    None
+                    Some P5.PerlinNoise.P5_136
                 | _ -> None
                 |> function
-                    |Some x ->
-                        printfn "Setting up setup and draw routines"
-                        x()
-
-                        // P5.p5(500,500,x.setup,x.draw)
-                        // P5.p5 x
-                        |> ignore
-                        true
-                    |None ->
-                        // if not <| isNull Browser.window?p5Instance then
-                        //     Browser.window
-
-
-                        false
-            else true
-        printfn "HasModel? %A" hasModel
+                    |None -> false,None
+                    | Some x -> true,Some x
+            else true,None
+        printfn "HasModel? %b" hasModel
+        fSketchOpt
+        |> Option.iter(fun fSk ->
+            if hadValue then fSk() |> ignore<SketchWrapper>
+            // lazy loading the script tag has problems
+            else JS.setTimeout (fun () -> fSk () |> ignore<SketchWrapper>) 200 |> ignore
+        )
         div [] [
             Heading.h3 [] [str model.Index]
             Container.container [][
                 Content.content [] [
-                    div [] [ str <| if hasModel then null else "No matching model found" ]
+                    div [] [ str <| if hasModel then model.Index else "No matching model found" ]
                 ]
             ]
 

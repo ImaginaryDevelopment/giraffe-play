@@ -6,8 +6,8 @@
     <ItemGroup>
         <Compile Include="..\Shared\Shared.fs" />
         <Compile Include="P5/P5.fs"/>
-        <Compile Include="P5/0-p5-routing.fs"/>
         <Compile Include="P5/136-perlinnoise.fs"/>
+        <Compile Include="P5/P5-routing.fs"/>
         <Compile Include="Client.fs" />
     </ItemGroup>
     <Import Project="..\..\.paket\Paket.Restore.targets" />

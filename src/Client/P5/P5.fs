@@ -1,4 +1,4 @@
-module P5
+namespace P5
 
 open Fable.Core
 open Fable.Core.JsInterop
@@ -37,10 +37,10 @@ type Sketch =
     abstract member CLOSE:string
     abstract member noLoop: unit -> unit
 
-[<Emit("new p5($0)")>]
-let private p5(sk:Sketch -> unit):obj = jsNative
 
 module P5Impl =
+    [<Emit("new p5($0)")>]
+    let p5(sk:Sketch -> unit):obj = jsNative
     let windowSk = PropertyWrap<Sketch option>((fun () -> Browser.window?sk), fun v -> Browser.window?sk<-v)
 // wrapper to help manage instance mode https://github.com/processing/p5.js/wiki/Global-and-instance-mode
 type SketchWrapper(setup:Sketch -> unit, draw:Sketch-> unit, ?target) =
@@ -56,7 +56,7 @@ type SketchWrapper(setup:Sketch -> unit, draw:Sketch-> unit, ?target) =
     // assuming we will only have 1 on the screen at a time for now
         SketchWrapper.CleanUp()
         Browser.window?sk <- sk
-        p5Instance <- Some (p5 f)
+        p5Instance <- Some (P5Impl.p5 f)
     [<Emit("new p5($0,$1)")>]
     static member private p5(sk:Sketch -> unit,?element:Browser.Element):obj = jsNative
 
@@ -95,7 +95,7 @@ module Sample =
                 ()
             )
             sk.endShape(sk.CLOSE)
-            // sk.noLoop()
+            sk.noLoop()
         SketchWrapper(setup, draw)
 
 
