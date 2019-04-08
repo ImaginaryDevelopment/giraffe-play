@@ -28,7 +28,9 @@ module P5Impl =
         | Navigate ind ->
             {currentModel with Index = ind},Cmd.none
     let cleanUp() =
+        printfn"Clean up called"
         SketchWrapper.CleanUp()
+        Browser.window?index <- null
 module Run =
     let initP5 = lazy(
         let e = Browser.document.createElement("script")
@@ -43,28 +45,28 @@ module Run =
 
     let view model (dispatch:Msg->unit) =
         let hadValue = initP5.IsValueCreated
-        initP5.Force()
+        // initP5.Force()
+        let isRevisit = Browser.window?index = model.Index
 
         let hasModel,fSketchOpt =
             // hack attempt to dispose previous drawing
-            if Browser.window?index <> model.Index then
-                match model.Index with
-                | null | "home" ->
-                    Some P5.Sample.P5_0
-                | "136-perlinnoise" ->
-                    Some P5.PerlinNoise.P5_136
-                | _ -> None
-                |> function
-                    | None -> false,None
-                    | Some x -> true,Some x
-            else true,None
-        printfn "HasModel? %b" hasModel
+            match model.Index with
+            | null | "home" ->
+                Some P5.Sample.P5_0
+            | "136-perlinnoise" ->
+                printfn "Doing perlin noise"
+                Some P5.PerlinNoise.P5_136
+            | _ -> None
+            |> function
+                | None -> false,None
+                | Some x -> true,Some x
         fSketchOpt
         |> Option.iter(fun fSk ->
             if hadValue then fSk() |> ignore<SketchWrapper>
             // lazy loading the script tag has problems
             else JS.setTimeout (fun () -> fSk () |> ignore<SketchWrapper>) 200 |> ignore
         )
+        Browser.window?index<-model.Index
         div [] [
             Heading.h3 [] [str model.Index]
             Container.container [][
@@ -74,9 +76,9 @@ module Run =
                         ("home" :: (models |> List.map fst))
                         |> List.map(fun name ->
                             li [] [
-                                if model.Index <> name then
+                                // if model.Index <> name then
                                     yield a [ Href <| sprintf "#%s" name; OnClick (fun _ -> dispatch (Navigate name)) ][str name]
-                                else yield label [] [str name]
+                                // else yield label [] [str name]
                             ]
                         )
                     )
