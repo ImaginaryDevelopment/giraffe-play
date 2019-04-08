@@ -32,6 +32,7 @@ module P5Impl =
         SketchWrapper.CleanUp()
         Browser.window?index <- null
 module Run =
+    type CodingTrain = {Index:string; Link:string option; Initializer:unit->SketchWrapper}
     let initP5 = lazy(
         let e = Browser.document.createElement("script")
         // s?type <- "text/javascript"
@@ -39,9 +40,10 @@ module Run =
         Browser.document.body.appendChild(e)
         |> ignore<Browser.Node>
     )
+    let ct index init link = {Index = index;Initializer=init;Link=link}
     let models = [
-        "001-starfield", P5.Starfield.p5_001
-        "136-perlinnoise", P5.PerlinNoise.P5_136
+        ct "001-starfield" P5.Starfield.p5_001 (Some "17WoOqgXsRM")
+        ct "136-perlinnoise" P5.PerlinNoise.P5_136 (Some "ZI1dmHv3MeM")
     ]
 
     let view model (dispatch:Msg->unit) =
@@ -58,10 +60,10 @@ module Run =
             | i ->
                 models
 
-                |> List.tryFind(fst>> (=) i)
+                |> List.tryFind(fun x -> x.Index = i)
                 |> function
-                    |Some (_,f) ->
-                        Some f
+                    |Some x ->
+                        Some x.Initializer
                     | None -> None
             |> function
                 | None -> false,None
@@ -73,19 +75,28 @@ module Run =
             else JS.setTimeout (fun () -> fSk () |> ignore<SketchWrapper>) 200 |> ignore
         )
         Browser.window?index<-model.Index
+        let navLink name = a [ Href <| sprintf "#%s" name; OnClick (fun _ -> dispatch (Navigate name)) ][str name]
+        let ytLink ident = a [ Href <| sprintf "https://www.youtube.com/watch?v=%s" ident; Target "_"] [ str "Watch"]
         div [] [
             Heading.h3 [] [str model.Index]
             Container.container [][
                 Content.content [] [
                     div [] [ str <| (if hasModel then model.Index elif isNull model.Index then "home" else "No matching model found") ]
                     ol [] (
-                        ("home" :: (models |> List.map fst))
-                        |> List.map(fun name ->
-                            li [] [
-                                // if model.Index <> name then
-                                    yield a [ Href <| sprintf "#%s" name; OnClick (fun _ -> dispatch (Navigate name)) ][str name]
-                                // else yield label [] [str name]
-                            ]
+                        navLink "home" ::
+                        (models
+                            |> List.map(fun x ->
+                                li [] [
+                                    // if model.Index <> name then
+                                        yield navLink x.Index
+                                        match x.Link with
+                                        | None -> ()
+                                        | Some link ->
+                                            yield str " - "
+                                            yield ytLink link
+                                    // else yield label [] [str name]
+                                ]
+                            )
                         )
                     )
                 ]
