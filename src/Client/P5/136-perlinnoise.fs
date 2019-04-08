@@ -13,6 +13,7 @@ let P5_136() =
         printfn "Setup is running"
         sk.createCanvas 600 600
         slider <- sk.createSlider(0.0,10.0,0.0,0.1)
+        sk.noiseSeed(System.Random().Next())
         // sk.frameRate 15
         // slider <-
 

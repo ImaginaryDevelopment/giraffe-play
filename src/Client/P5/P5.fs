@@ -47,6 +47,8 @@ type ISketchCore =
     abstract member noise: float -> float
     abstract member noise: x:float*y:float -> float
     abstract member noise: x:float*y:float*z:float -> float
+    abstract member noiseSeed:int -> unit
+
     abstract member redraw: unit -> unit
     abstract member sin:float -> float
     abstract member vertex: x:float * y:float-> unit
