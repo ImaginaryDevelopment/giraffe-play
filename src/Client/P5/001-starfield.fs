@@ -16,26 +16,25 @@ type Star(fSpeed, width,height,?seedOpt) =
     let mutable x = floatNext (width * -1) width
     let mutable y = floatNext (height * -1) height
     let mutable z = float width
-    let mutable px = 0.0
-    let mutable py = 0.0
+    let mutable pz = z
     member __.update() =
         z <- z - (fSpeed())
         if z < 1.0 then
             z <- float width
             x <- floatNext (width * -1) width
-            px <- 0.0
-            py <- 0.0
+            pz <- z
     member this.show(sk:ISketch) =
         sk.fill(255)
         sk.noStroke()
         let sx = sk.map(x / z, 0.0, 1.0, 0.0, float width)
         let sy = sk.map(y / z, 0.0, 1.0, 0.0, float width)
         let r = sk.map(float z, 0.0, float width, 16.0, 0.0)
-        sk.ellipse(sx,sy,r,r)
+        // sk.ellipse(sx,sy,r,r)
+        let px = sk.map(x / pz, 0.0, 1.0, 0.0, float width)
+        let py = sk.map(y / pz, 0.0, 1.0, 0.0, float width)
+        pz <- z
         sk.stroke(255)
         sk.line(px,py,sx,sy)
-        px <- sx
-        py <- sy
         ()
 
 let p5_001() =
