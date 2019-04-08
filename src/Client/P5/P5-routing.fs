@@ -14,14 +14,14 @@ open Fable.Import
 open Fable.Import.JS
 
 // allow for non-challenge indexes
-type Model = {Index:string;Sketch:SketchWrapper option}
+type Model = {Index:string}
 
 type Msg =
     |Navigate of index:string
 module P5Impl =
 
     let init () : Model * Cmd<Msg> =
-        {Index=null;Sketch=None},Cmd.none
+        {Index=null},Cmd.none
 
     let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         match msg with
@@ -36,8 +36,11 @@ module Run =
         e?src<-"https://cdnjs.cloudflare.com/ajax/libs/p5.js/0.7.3/p5.js"
         Browser.document.body.appendChild(e)
         |> ignore<Browser.Node>
-
     )
+    let models = [
+        "136-perlinnoise", P5.PerlinNoise.P5_136
+    ]
+
     let view model (dispatch:Msg->unit) =
         let hadValue = initP5.IsValueCreated
         initP5.Force()
@@ -46,13 +49,13 @@ module Run =
             // hack attempt to dispose previous drawing
             if Browser.window?index <> model.Index then
                 match model.Index with
-                | null | "" | "0" ->
+                | null | "home" ->
                     Some P5.Sample.P5_0
                 | "136-perlinnoise" ->
                     Some P5.PerlinNoise.P5_136
                 | _ -> None
                 |> function
-                    |None -> false,None
+                    | None -> false,None
                     | Some x -> true,Some x
             else true,None
         printfn "HasModel? %b" hasModel
@@ -66,7 +69,17 @@ module Run =
             Heading.h3 [] [str model.Index]
             Container.container [][
                 Content.content [] [
-                    div [] [ str <| if hasModel then model.Index else "No matching model found" ]
+                    div [] [ str <| (if hasModel then model.Index elif isNull model.Index then "home" else "No matching model found") ]
+                    ol [] (
+                        ("home" :: (models |> List.map fst))
+                        |> List.map(fun name ->
+                            li [] [
+                                if model.Index <> name then
+                                    yield a [ Href <| sprintf "#%s" name; OnClick (fun _ -> dispatch (Navigate name)) ][str name]
+                                else yield label [] [str name]
+                            ]
+                        )
+                    )
                 ]
             ]
 
