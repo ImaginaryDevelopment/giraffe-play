@@ -85,7 +85,7 @@ module Sample =
             sk.beginShape()
             [0.0 .. 0.01 .. sk.TWO_PI]
             |> Seq.iter(fun a ->
-                let r = 100.0
+                let r = float <| System.Random().Next(50,100)
                 let x:float = r * System.Math.Cos(a)
                 let y:float = r * System.Math.Sin(a)
                 sk.vertex(x,y)
