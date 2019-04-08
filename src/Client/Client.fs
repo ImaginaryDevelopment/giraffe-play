@@ -27,7 +27,11 @@ let onKeyDown keyCode action =
 // in this case, we are keeping track of a counter
 // we mark it as optional, because initially it will not be available from the client
 // the initial value will be requested from server
-type Model = { Counter: Counter option; PortInput:int option; ValidationError:string option; PingStatus:PingStatus option }
+type ClientMode =
+    |Regular
+    |P5Mode
+
+type Model = { ClientMode:ClientMode; Counter: Counter option; PortInput:int option; ValidationError:string option; PingStatus:PingStatus option ; P5Model: P5Routing.Model}
 
 type CounterMsg =
     | Increment
@@ -40,21 +44,27 @@ type PorterMsg =
     | PortCheck
     | PortCheckLoaded of Result<PingStatus,exn>
 type Msg =
-    |Counter of CounterMsg
-    |Porter of PorterMsg
+    |CounterMsg of CounterMsg
+    |PorterMsg of PorterMsg
+    |P5Msg of P5Routing.Msg
+    |ChangeMode of ClientMode
+
 
 let initialCounter = fetchAs<Counter> "/api/init" (Decode.Auto.generateDecoder())
 
 // defines the initial state and initial command (= side-effect) of the application
 let init () : Model * Cmd<Msg> =
-    let initialModel = { Counter = None; PortInput = None; ValidationError = None; PingStatus=None}
+
     let loadCountCmd =
         Cmd.ofPromise
             initialCounter
             []
             (Ok >> InitialCountLoaded)
             (Error >> InitialCountLoaded)
-    initialModel, (loadCountCmd |> Cmd.map Counter)
+    let p5Model,cmd = P5Routing.P5Impl.init()
+    let initialModel =
+        {ClientMode=Regular; Counter = None; PortInput = None; ValidationError = None; PingStatus=None;P5Model=p5Model}
+    initialModel, Cmd.batch [(loadCountCmd |> Cmd.map CounterMsg) ; cmd |> Cmd.map P5Msg]
 
 let listenerCheck port =
     fetchAs<PingStatus> (sprintf "/api/ping?port=%i" port) (Decode.Auto.generateDecoder())
@@ -64,34 +74,54 @@ let listenerCheck port =
 // It can also run side-effects (encoded as commands) like calling the server via Http.
 // these commands in turn, can dispatch messages to which the update function will react.
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
-    match msg with
-    | Counter cm ->
-        match currentModel.Counter, cm with
-        | Some counter, Increment ->
-            let nextModel = { currentModel with Counter = Some { Value = counter.Value + 1 } }
-            nextModel, Cmd.none
-        | Some counter, Decrement ->
-            let nextModel = { currentModel with Counter = Some { Value = counter.Value - 1 } }
-            nextModel, Cmd.none
-        | _, InitialCountLoaded (Ok initialCount) ->
-            let nextModel = { Counter = Some initialCount; PortInput=None; ValidationError=None;PingStatus= None}
-            nextModel, Cmd.none
-    | Porter (PortChanged raw) ->
-        match System.Int32.TryParse(raw) with
-        | true, x ->
-            {currentModel with PortInput = Some x;ValidationError=None}, Cmd.none
-        | false, _ -> {currentModel with ValidationError= Some "Failed to read port"}, Cmd.none
-    | Porter PortCheck ->
-        match currentModel.PortInput with
-        | None ->
-            {currentModel with ValidationError=Some "No valid port to check"}, Cmd.none
-        | Some port ->
-            let cmd = Cmd.ofPromise (listenerCheck port) [] (Ok >> PortCheckLoaded) (Error >> PortCheckLoaded)
-            {currentModel with ValidationError = None}, cmd |> Cmd.map Porter
-    | Porter (PortCheckLoaded (Ok ps)) ->
-        {currentModel with PingStatus = Some ps}, Cmd.none
-    | Porter (PortCheckLoaded (Error ex)) ->
-        {currentModel with ValidationError = Some <| sprintf "%A" ex}, Cmd.none
+    let onIfP5ModeLeaving nextModel=
+        match nextModel with
+        | {ClientMode=P5Mode} -> ()
+        | _ ->
+            match currentModel with
+            | {ClientMode=P5Mode} ->
+                P5Routing.P5Impl.cleanUp()
+        nextModel
+    let nextModel,cmd =
+        match msg with
+        | ChangeMode mode ->
+            {currentModel with ClientMode=mode}, Cmd.none
+        | P5Msg msg ->
+            let model,cmd = P5Routing.P5Impl.update msg currentModel.P5Model
+            {currentModel with P5Model = model}, cmd |> Cmd.map P5Msg
+        | CounterMsg cm ->
+            match currentModel.Counter, cm with
+            | Some counter, Increment ->
+                let nextModel = { currentModel with Counter = Some { Value = counter.Value + 1 } }
+                nextModel, Cmd.none
+            | Some counter, Decrement ->
+                let nextModel = { currentModel with Counter = Some { Value = counter.Value - 1 } }
+                nextModel, Cmd.none
+            | _, InitialCountLoaded (Ok initialCount) ->
+                let nextModel = {currentModel with Counter = Some initialCount; PortInput=None; ValidationError=None;PingStatus= None}
+                nextModel, Cmd.none
+        | PorterMsg (PortChanged raw) ->
+            match System.Int32.TryParse(raw) with
+            | true, x ->
+                {currentModel with PortInput = Some x;ValidationError=None}, Cmd.none
+            | false, _ -> {currentModel with ValidationError= Some "Failed to read port"}, Cmd.none
+        | PorterMsg PortCheck ->
+            match currentModel.PortInput with
+            | None ->
+                {currentModel with ValidationError=Some "No valid port to check"}, Cmd.none
+            | Some port ->
+                let cmd = Cmd.ofPromise (listenerCheck port) [] (Ok >> PortCheckLoaded) (Error >> PortCheckLoaded)
+                {currentModel with ValidationError = None}, cmd |> Cmd.map PorterMsg
+        | PorterMsg (PortCheckLoaded (Ok ps)) ->
+            {currentModel with PingStatus = Some ps}, Cmd.none
+        | PorterMsg (PortCheckLoaded (Error ex)) ->
+            {currentModel with ValidationError = Some <| sprintf "%A" ex}, Cmd.none
+    let nextModel =
+        (nextModel,[ onIfP5ModeLeaving])
+        ||> List.fold(fun nextModel f ->
+            f nextModel
+        )
+    nextModel, cmd
 
 
 
@@ -123,33 +153,43 @@ let button txt onClick =
           Button.Color IsPrimary
           Button.OnClick onClick ]
         [ str txt ]
-
+let regularMode model dispatch =
+  Container.container []
+      [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
+            [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model) ] ]
+        Columns.columns []
+            [ Column.column [] [ button "-" (fun _ -> dispatch (CounterMsg Decrement)) ]
+              Column.column [] [ button "+" (fun _ -> dispatch (CounterMsg Increment)) ] ]
+        Label.label [] [str "Enter port to check"]
+        Input.number [Input.Placeholder "Ex: 8080"
+                      Input.Value (string model.PortInput)
+                    //   Input.Modifiers [ Modifier.TextTransform TextTransform.UpperCase ]
+                      Input.Color (if model.ValidationError.IsSome then Color.IsDanger else Color.IsSuccess)
+                      Input.Props [ OnChange (fun ev -> dispatch (Msg.PorterMsg(PortChanged !!ev.target?value))); onKeyDown KeyCode.enter (fun _ -> dispatch (PorterMsg PortCheck)) ] ]
+        Label.label [] [ model.ValidationError |> Option.defaultValue null |> str ]
+        Label.label [] [ model.PingStatus |> Option.map (fun ps -> sprintf "Port %i - %s" ps.Port ps.PortStatus) |> Option.defaultValue "" |> str]
+      ]
 let view (model : Model) (dispatch : Msg -> unit) =
     div []
         [ Navbar.navbar [ Navbar.Color IsPrimary ]
             [ Navbar.Item.div [ ]
-                [ Heading.h2 [ ]
-                    [ str "SAFE Template" ] ] ]
+                [ Heading.h2 [] [ str "SAFE Template" ] ]
+              Navbar.Item.div [][
+                  div [] [ button "Home" (fun _ -> dispatch <| ChangeMode ClientMode.Regular)]
+                  div [] [ button "P5" (fun _ -> dispatch <| ChangeMode ClientMode.P5Mode )]
 
-          Container.container []
-              [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-                    [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model) ] ]
-                Columns.columns []
-                    [ Column.column [] [ button "-" (fun _ -> dispatch (Counter Decrement)) ]
-                      Column.column [] [ button "+" (fun _ -> dispatch (Counter Increment)) ] ]
-                Label.label [] [str "Enter port to check"]
-                Input.number [Input.Placeholder "Ex: 8080"
-                              Input.Value (string model.PortInput)
-                            //   Input.Modifiers [ Modifier.TextTransform TextTransform.UpperCase ]
-                              Input.Color (if model.ValidationError.IsSome then Color.IsDanger else Color.IsSuccess)
-                              Input.Props [ OnChange (fun ev -> dispatch (Msg.Porter(PortChanged !!ev.target?value))); onKeyDown KeyCode.enter (fun _ -> dispatch (Porter PortCheck)) ] ]
-                Label.label [] [ model.ValidationError |> Option.defaultValue null |> str ]
-                Label.label [] [ model.PingStatus |> Option.map (fun ps -> sprintf "Port %i - %s" ps.Port ps.PortStatus) |> Option.defaultValue "" |> str]
               ]
-
+            ]
+          (match model.ClientMode with
+            | Regular -> regularMode model dispatch
+            | P5Mode ->
+                printfn "Running in P5 mode"
+                P5Routing.Run.view model.P5Model (P5Msg >> dispatch)
+          )
           Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
-                    [ safeComponents ] ] ]
+                    [ safeComponents ] ]
+        ]
 
 #if DEBUG
 open Elmish.Debug
