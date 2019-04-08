@@ -18,19 +18,29 @@ module GlobalMode =
 
 [<AllowNullLiteral>]
 type Sketch =
-    abstract member createCanvas: int -> int -> unit
-    abstract member background: int -> unit
-    abstract member fill: int -> unit
+    abstract member createCanvas: x:int -> width:int -> unit
+    abstract member background: color:int -> unit
+    abstract member fill: color:int -> unit
     abstract member rect: int -> int -> int -> int -> unit
     abstract member frameRate : int -> unit
     abstract member remove:unit->unit
+    abstract member translate: width:float -> height:float -> unit
+    abstract member stroke: int -> unit
+    abstract member noFill: unit -> unit
+    abstract member beginShape: unit -> unit
+    abstract member vertex: x:float * y:float-> unit
+    abstract member endShape: unit -> unit
+    abstract member width: float with get,set
+    abstract member height: float with get,set
+    abstract member TWO_PI:float
 
 [<Emit("new p5($0)")>]
 let private p5(sk:Sketch -> unit):obj = jsNative
 
 module P5Impl =
     let windowSk = PropertyWrap<Sketch option>((fun () -> Browser.window?sk), fun v -> Browser.window?sk<-v)
-type SketchWrapper(setup:Sketch -> unit, draw:Sketch-> unit) =
+// wrapper to help manage instance mode https://github.com/processing/p5.js/wiki/Global-and-instance-mode
+type SketchWrapper(setup:Sketch -> unit, draw:Sketch-> unit, ?target) =
     let mutable sk = None
     let mutable p5Instance = None
     let f sketch =
@@ -44,6 +54,9 @@ type SketchWrapper(setup:Sketch -> unit, draw:Sketch-> unit) =
         SketchWrapper.CleanUp()
         Browser.window?sk <- sk
         p5Instance <- Some (p5 f)
+    [<Emit("new p5($0,$1)")>]
+    static member private p5(sk:Sketch -> unit,?element:Browser.Element):obj = jsNative
+
     member __.Dispose() =
         sk
         |> Option.iter(fun sk -> sk.remove())
@@ -61,12 +74,24 @@ module Sample =
     let P5_0 () =
         let setup (sk:Sketch) =
             printfn "Setup is running"
-            sk.createCanvas 500 500
+            sk.createCanvas 600 600
             sk.frameRate 15
 
         let draw(sk:Sketch) =
-            sk.fill 255
-            sk.rect 10 10 100 200
+            sk.background 0
+            sk.translate (sk.width / 2.0) (sk.height / 2.0)
+            sk.stroke 255
+            sk.noFill()
+            sk.beginShape()
+            [0.0 .. 0.01 .. sk.TWO_PI]
+            |> Seq.iter(fun a ->
+                let r = 100.0
+                let x:float = r * System.Math.Cos(a)
+                let y:float = r * System.Math.Sin(a)
+                sk.vertex(x,y)
+                ()
+            )
+            sk.endShape()
         SketchWrapper(setup, draw)
 
 

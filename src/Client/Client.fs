@@ -81,6 +81,7 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             match currentModel with
             | {ClientMode=P5Mode} ->
                 P5Routing.P5Impl.cleanUp()
+            | _ -> ()
         nextModel
     let nextModel,cmd =
         match msg with
