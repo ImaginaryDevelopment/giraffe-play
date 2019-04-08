@@ -7,9 +7,11 @@ open Fable.Import
 open P5
 
 let P5_136() =
+    let mutable slider = null
     let setup (sk:ISketch) =
         printfn "Setup is running"
         sk.createCanvas 600 600
+        slider <- sk.createSlider(0.0,10.0,0.0,0.1)
         // sk.frameRate 15
         // slider <-
 
@@ -21,7 +23,7 @@ let P5_136() =
         sk.stroke 255
         sk.noFill()
         sk.beginShape()
-        let noiseMax = 5.0
+        let noiseMax = slider.value()
 
         [0.0 .. 0.1 .. sk.TWO_PI]
         |> Seq.iter(fun a ->
