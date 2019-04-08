@@ -7,35 +7,51 @@ open Fable.Core.JsInterop
 open Fable.Import
 
 open P5
-type Star(width,height,?seedOpt) =
+type Star(fSpeed, width,height,?seedOpt) =
     let random =
         match seedOpt with
         | None -> Random()
         | Some i -> Random(i)
     let floatNext min max = random.Next(min,max) |> float
-    let x = floatNext 0 width
-    let y = floatNext 0 height
-    let z = float width
-    member this.update() = ()
+    let mutable x = floatNext (width * -1) width
+    let mutable y = floatNext (height * -1) height
+    let mutable z = float width
+    let mutable px = 0.0
+    let mutable py = 0.0
+    member __.update() =
+        z <- z - (fSpeed())
+        if z < 1.0 then
+            z <- float width
+            x <- floatNext (width * -1) width
+            px <- 0.0
+            py <- 0.0
     member this.show(sk:ISketch) =
         sk.fill(255)
         sk.noStroke()
         let sx = sk.map(x / z, 0.0, 1.0, 0.0, float width)
         let sy = sk.map(y / z, 0.0, 1.0, 0.0, float width)
-        sk.ellipse(sx,sy,8.0,8.0)
+        let r = sk.map(float z, 0.0, float width, 16.0, 0.0)
+        sk.ellipse(sx,sy,r,r)
+        sk.stroke(255)
+        sk.line(px,py,sx,sy)
+        px <- sx
+        py <- sy
         ()
 
 let p5_001() =
     let w,h = 800,800
-    let stars = ResizeArray()
+    let count = 100
+    let stars = Array.zeroCreate 800
 
-    let mutable speed = 0.0
+    let mutable speed = 15.0
     let setup (sk:ISketch) =
         sk.createCanvas w h
-        [0..100] |> List.iter(fun _ -> stars.Add (Star(w,h)))
-        ()
+        stars |> Seq.iteri(fun i _ ->stars.[i] <- (Star((fun () -> speed),w,h))
+        )
     let draw (sk:ISketch) =
+        speed <- sk.map(sk.mouseX, 0.0, float w, 0.0, 20.0)
         sk.background(0)
+        sk.translate(float w / 2.0, float h / 2.0)
         stars |> Seq.iter(fun x -> x.update();x.show sk)
         // star.update()
         ()

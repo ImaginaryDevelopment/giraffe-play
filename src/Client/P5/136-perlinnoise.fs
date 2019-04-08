@@ -24,7 +24,7 @@ let P5_136() =
         let cos = sk.cos
         let sin = sk.sin
         sk.background 0
-        sk.translate (sk.width / 2.0) (sk.height / 2.0)
+        sk.translate (sk.width / 2.0, sk.height / 2.0)
         sk.stroke 255
         sk.noFill()
         sk.beginShape()

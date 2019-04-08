@@ -23,29 +23,32 @@ type ISketchCore =
     abstract member TWO_PI:float
     abstract member CLOSE:string
 
-    abstract member width: float with get,set
-    abstract member height: float with get,set
     abstract member canvas: ICanvas
+    abstract member height: float with get,set
+    abstract member width: float with get,set
+    abstract member mouseX: float
+    abstract member mouseY: float
 
+    abstract member beginShape: unit -> unit
     abstract member cos:float -> float
     abstract member createCanvas: w:int -> h:int -> unit
     abstract member background: color:int -> unit
     abstract member draw:unit -> unit
-    abstract member fill: color:int -> unit
-    abstract member rect: int -> int -> int -> int -> unit
-    abstract member frameRate : int -> unit
-    abstract member remove:unit->unit
-    abstract member translate: width:float -> height:float -> unit
-    abstract member stroke: int -> unit
-    abstract member beginShape: unit -> unit
     abstract member endShape: unit -> unit
     abstract member endShape: string -> unit
+    abstract member fill: color:int -> unit
+    abstract member frameRate : int -> unit
+    abstract member line: x1:float*y1:float*x2:float*y2:float -> unit
     abstract member map: n:float * start1:float * stop1:float * start2:float * stop2:float -> float
     abstract member map: n:float * start1:float * stop1:float * start2:float * stop2:float * withinBounds:bool -> float
     abstract member noise: float -> float
     abstract member noise: x:float*y:float -> float
     abstract member noise: x:float*y:float*z:float -> float
     abstract member noiseSeed:int -> unit
+    abstract member rect: int -> int -> int -> int -> unit
+    abstract member remove:unit->unit
+    abstract member stroke: int -> unit
+    abstract member translate: width:float * height:float -> unit
 
     abstract member noFill: unit -> unit
     abstract member noLoop: unit -> unit
@@ -147,7 +150,7 @@ module Sample =
 
         let draw(sk:ISketch) =
             sk.background 0
-            sk.translate (sk.width / 2.0) (sk.height / 2.0)
+            sk.translate (sk.width / 2.0, sk.height / 2.0)
             sk.stroke 255
             sk.noFill()
             sk.beginShape()
