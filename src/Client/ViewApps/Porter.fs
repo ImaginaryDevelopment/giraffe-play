@@ -44,11 +44,16 @@ module PorterImpl =
                 printfn "Sleeper sleeping for ident:%i (%i second(s))" port sleep
                 do! Promise.sleep (int sleep * 1000)
             printfn "Fetching!"
-            let! result = fetchAs<PingStatus> (sprintf "/api/ping?port=%i" port) (Decode.Auto.generateDecoder<PingStatus>(isCamelCase=false)) []
-            // match Thoth.Json.Decode.Auto.fromString<PingStatus>(result) with
+            let url = sprintf "/api/ping?port=%i" port
+            // let! result = fetchAs<PingStatus> url (Decode.Auto.generateDecoder<PingStatus>(isCamelCase=false)) []
+            // return result
+            // match Thoth.Json.Decode.Auto.fromString<PingStatus>()) with
             // | Ok x -> return x
             // | Error r -> return invalidOp <| sprintf "Deserialization failed %s" r
-            return result
+            let! result = Fetch.fetch url []
+            let! decoded =result.json()
+            let cast = decoded :?> PingStatus
+            return cast
         }
     let storage = Storage.store<Port list>("Porter.PorterImpl.watchKey")
     let addPort port name ps (m:PortMap) = m |> Map.add port (name |> Option.bind Option.ofValueString,ps)
@@ -194,7 +199,7 @@ module Run =
                                 match ps with
                                 | Some ps ->
                                     yield td [ if ps.IsOpen then yield ClassName "is-success" else yield ClassName "is-danger"] [str <| string ps.IsOpen]
-                                    yield td [] [ str <| ps.When.ToLongTimeString() ]
+                                    yield td [] [ str <|  string ps.When ]
                                     yield td [ClassName "error"] [str <| string ps.ErrorMsg]
                                 | None ->
                                     yield td [] []
