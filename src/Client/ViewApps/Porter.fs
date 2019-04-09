@@ -16,33 +16,53 @@ open ClientShared
 open System.Threading.Tasks
 
 type Name = string
-type Port = {Name:Name;Port:int}
+type Ident = int
+type Port = {Name:Name option;Ident:Ident}
+type PortMap = Map<int,string option*PingStatus option>
 
 type Msg =
     | PortNamed of string
     | PortChanged of string
     | PortCheck of name:string option
-    | PortCheckLoaded of Result<PingStatus,exn>
+    | PortCheckLoaded of Result<PingStatus,Ident*exn>
     | PortInitMerge of Port list
     | PortInitFail of exn
-
-type Model = {PortName:string; PortInput:int option; Ports:Map<int,string option*PingStatus option>;Error:string option}
+[<Measure>] type s
+type Model = {PortName:string; PortInput:int option; Ports:PortMap;Error:string option;Sleep:int<s>}
 
 module PorterImpl =
     open Fable.PowerPack.Fetch
+    open Fable.PowerPack
     open Microsoft.FSharp.Core
-    let listenerCheck port =
-        fetchAs<PingStatus> (sprintf "/api/ping?port=%i" port) (Decode.Auto.generateDecoder())
-    let watchKey = "Porter.PorterImpl.watchKey"
+    let listenerCheck sleep port =
+        promise {
+            if sleep > 0<s> then
+                printfn "Sleeper sleeping for ident:%i (%i second(s))" port sleep
+                do! Promise.sleep (int sleep * 1000)
+            let! result = fetchAs<PingStatus> (sprintf "/api/ping?port=%i" port) (Decode.Auto.generateDecoder()) []
+            return result
+        }
+    let storage = Storage.store<Port list>("Porter.PorterImpl.watchKey")
+    let addPort port name ps (m:PortMap) = m |> Map.add port (name |> Option.bind Option.ofValueString,ps)
+    let inline foldPort m port (name,ps) = addPort port name ps m
+    let inline insertPorts m port =
+        foldPort m port.Ident (port.Name,None)
+
+
     let initCmd:Cmd<Msg> =
         Cmd.ofFunc (fun () ->
             printfn "Porter.initCmd starting"
-            match Storage.get watchKey with
-            | None
-            | Some [] -> printfn "Found key";[]
-            | Some x ->
-                printfn "Found key"
-                x
+            try
+                match storage.Get() with
+                | None -> printfn "No key found";None
+                | Some [] -> printfn "Found empty key";None
+                | Some x ->
+                    printfn "Found key"
+                    Some x
+            with ex ->
+                eprintfn "Error checking storage:%s" ex.Message
+                None
+            |> Option.defaultValue List.empty
             )
             ()
             Msg.PortInitMerge
@@ -51,17 +71,24 @@ module PorterImpl =
 
     //consider loading up from localstorage any saved ports and listening for them
     let init () : Model * Cmd<Msg> =
-        {PortName="";PortInput = None;Ports=Map.empty;Error = None},initCmd
+        {PortName="";PortInput = None;Ports=Map.empty;Error = None;Sleep=3<s>},initCmd
 
 
     let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
+        let listenerCmd sleep port = Cmd.ofPromise (listenerCheck sleep) port (Ok >> PortCheckLoaded) (fun e -> PortCheckLoaded(Error(port,e)))
+        let batchListen ports = Cmd.batch (ports |> Seq.map (listenerCmd currentModel.Sleep))
+
         match msg with
         | PortInitFail x ->
             printfn "Merging ports failed"
             {currentModel with Error=Some x.Message },Cmd.none
         | PortInitMerge x ->
             printfn "Merging ports"
-            currentModel, Cmd.none
+            let ps =
+                (currentModel.Ports,x)
+                ||> Seq.fold insertPorts
+            let cmd = x |> Seq.map(fun p -> p.Ident) |> batchListen
+            {currentModel with Ports=ps}, cmd
         | PortNamed raw -> {currentModel with PortName = raw},Cmd.none
         | PortChanged raw ->
             match System.Int32.TryParse raw with
@@ -73,23 +100,25 @@ module PorterImpl =
             | None ->
                 {currentModel with Error=Some "No valid port to check"}, Cmd.none
             | Some port ->
-                let cmd = Cmd.ofPromise (listenerCheck port) [] (Ok >> PortCheckLoaded) (Microsoft.FSharp.Core.Error >> PortCheckLoaded)
-                let ps = currentModel.Ports |> Map.add port (name |> Option.bind Option.ofValueString,None)
+                let ps = currentModel.Ports |> addPort port (name |> Option.bind Option.ofValueString) None
                 Browser.console.log(name,port)
-                {currentModel with Ports = ps; Error = None}, cmd
+                {currentModel with Ports = ps; Error = None}, listenerCmd 0<s> port
         | PortCheckLoaded (Ok ps) ->
             printfn "Port Check loaded"
             currentModel.Ports
             |> Map.tryFind ps.Port
             |> function
                 | Some (name,_) ->
-                    let ps =
-                        currentModel.Ports
-                        |> Map.add ps.Port (name,Some ps)
-                    {currentModel with Ports = ps}, Cmd.none
+                    let prts = addPort ps.Port name (Some ps) currentModel.Ports
+                    prts
+                    |> Map.toSeq
+                    |> Seq.map (fun (k,(v,_)) -> {Ident=k;Name=v})
+                    |> List.ofSeq
+                    |> storage.Set
+                    {currentModel with Ports = prts}, listenerCmd currentModel.Sleep ps.Port
                 | None -> {currentModel with Error = Some <| sprintf "PortCheck status returned for unloaded port:%i" ps.Port},Cmd.none
-        | PortCheckLoaded (Error ex) ->
-            {currentModel with Error = Some <| sprintf "%A" ex}, Cmd.none
+        | PortCheckLoaded (Error (p,ex)) ->
+            {currentModel with Error = Some <| sprintf "%A" ex}, listenerCmd currentModel.Sleep p
 module Run =
     open Fable.Helpers.React
     open Fable.Helpers.React.Props
@@ -137,8 +166,13 @@ module Run =
                                 match ps with
                                 | Some ps ->
                                     yield td [ if ps.IsOpen then yield ClassName "is-success" else yield ClassName "is-danger"] [str <| string ps.IsOpen]
+                                    yield td [] [ str <| ps.When.ToLongTimeString() ]
                                     yield td [ClassName "error"] [str <| string ps.Error]
-                                | None -> ()
+                                | None ->
+                                    yield td [] []
+                                    yield td [] []
+                                    yield td [] []
+
                             ]
                         )
                 ]

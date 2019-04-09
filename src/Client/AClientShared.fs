@@ -26,7 +26,7 @@ module Storage =
     open Thoth.Json
     // concern: how does this handle the key being present but no value?
     let inline get<'t> key :'t option =
-        match BrowserLocalStorage.load (Decode.Auto.generateDecoder()) key with
+        match BrowserLocalStorage.load (Decode.Auto.generateDecoder<'t>()) key with
         | Ok (x:'t) ->
             Some x
         | Error e ->
@@ -36,4 +36,15 @@ module Storage =
         BrowserLocalStorage.save key value
     let delete key =
         BrowserLocalStorage.delete key
+    type IStore<'t> =
+        abstract member Get: unit -> 't option
+        abstract member Set: 't -> unit
+        abstract member Delete:unit -> unit
+    let inline store<'t>(key) =
+        {new IStore<'t> with
+            member __.Get() = get<'t> key
+            member __.Set v = save<'t> key v
+            member __.Delete () = delete key
+        }
+
 

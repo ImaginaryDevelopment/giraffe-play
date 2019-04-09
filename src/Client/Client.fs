@@ -36,7 +36,7 @@ type Msg =
     |AppMsg of AppMsg
     |ChangeMode of ClientApp
 
-type Model = { ClientMode:ClientApp; CounterModel: CounterApp.Model ; PorterModel:Porter.Model; P5Model: P5Routing.Model;LoadMap:Map<ClientApp,Cmd<Msg>>}
+type Model = {ClientMode:ClientApp; CounterModel: CounterApp.Model ; PorterModel:Porter.Model; P5Model: P5Routing.Model;LoadMap:Map<ClientApp,Cmd<Msg>>}
 
 
 // defines the initial state and initial command (= side-effect) of the application
@@ -84,7 +84,11 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
             | AppMsg.Porter msg ->
                 // ugh optional model is a problem
                 let model, cmd = Porter.PorterImpl.update msg currentModel.PorterModel
-                {currentModel with PorterModel=model}, cmd |> cmdMap AppMsg.Porter
+                let cmd =
+                    match currentModel.ClientMode with
+                    | ClientApp.Porter -> cmd |> cmdMap AppMsg.Porter
+                    | _ -> Cmd.none
+                {currentModel with PorterModel=model}, cmd
             | AppMsg.P5 msg ->
                 let model,cmd = P5Routing.P5Impl.update msg currentModel.P5Model
                 {currentModel with P5Model = model}, cmd |> cmdMap AppMsg.P5
