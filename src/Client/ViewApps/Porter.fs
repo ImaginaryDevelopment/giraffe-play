@@ -14,6 +14,8 @@ open Shared.StringPatterns
 
 open ClientShared
 open System.Threading.Tasks
+open ClientShared.Controls
+
 
 type Name = string
 type Ident = int
@@ -27,19 +29,25 @@ type Msg =
     | PortCheckLoaded of Result<PingStatus,Ident*exn>
     | PortInitMerge of Port list
     | PortInitFail of exn
+    | SetPoll of bool
 [<Measure>] type s
-type Model = {PortName:string; PortInput:int option; Ports:PortMap;Error:string option;Sleep:int<s>}
+type Model = {PortName:string; PortInput:int option; Ports:PortMap;Error:string option;Sleep:int<s>;Poll:bool}
 
 module PorterImpl =
     open Fable.PowerPack.Fetch
     open Fable.PowerPack
     open Microsoft.FSharp.Core
-    let listenerCheck sleep port =
+    let listenerCheck sleep port:JS.Promise<PingStatus> =
+        printfn "making a promise"
         promise {
             if sleep > 0<s> then
                 printfn "Sleeper sleeping for ident:%i (%i second(s))" port sleep
                 do! Promise.sleep (int sleep * 1000)
-            let! result = fetchAs<PingStatus> (sprintf "/api/ping?port=%i" port) (Decode.Auto.generateDecoder()) []
+            printfn "Fetching!"
+            let! result = fetchAs<PingStatus> (sprintf "/api/ping?port=%i" port) (Decode.Auto.generateDecoder<PingStatus>(isCamelCase=false)) []
+            // match Thoth.Json.Decode.Auto.fromString<PingStatus>(result) with
+            // | Ok x -> return x
+            // | Error r -> return invalidOp <| sprintf "Deserialization failed %s" r
             return result
         }
     let storage = Storage.store<Port list>("Porter.PorterImpl.watchKey")
@@ -71,14 +79,32 @@ module PorterImpl =
 
     //consider loading up from localstorage any saved ports and listening for them
     let init () : Model * Cmd<Msg> =
-        {PortName="";PortInput = None;Ports=Map.empty;Error = None;Sleep=3<s>},initCmd
+        {PortName="";PortInput = None;Ports=Map.empty;Error = None;Sleep=5<s>;Poll=false},initCmd
 
 
     let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
+        printfn "update fired! %A" msg
         let listenerCmd sleep port = Cmd.ofPromise (listenerCheck sleep) port (Ok >> PortCheckLoaded) (fun e -> PortCheckLoaded(Error(port,e)))
-        let batchListen ports = Cmd.batch (ports |> Seq.map (listenerCmd currentModel.Sleep))
+        let listenCurrent forcePing model =
+            let batchListen ports = Cmd.batch (ports |> Seq.map (listenerCmd model.Sleep))
+            let shouldPing = model.Poll || forcePing
+            printfn "ListenCurrent will ping? %b" shouldPing
+            if shouldPing then
+                model.Ports
+                |> Map.toSeq
+                |> Seq.map fst
+                |> batchListen
+            else Cmd.none
 
         match msg with
+        | SetPoll(poll) ->
+            match currentModel.Poll, poll with
+            | false,false
+            | true, _ ->
+                {currentModel with Poll=false},Cmd.none
+            | false, true ->
+                let nextModel = {currentModel with Poll=true}
+                nextModel, listenCurrent false nextModel
         | PortInitFail x ->
             printfn "Merging ports failed"
             {currentModel with Error=Some x.Message },Cmd.none
@@ -87,8 +113,9 @@ module PorterImpl =
             let ps =
                 (currentModel.Ports,x)
                 ||> Seq.fold insertPorts
-            let cmd = x |> Seq.map(fun p -> p.Ident) |> batchListen
-            {currentModel with Ports=ps}, cmd
+            let nextModel ={currentModel with Ports=ps}
+            let cmd = listenCurrent true nextModel
+            nextModel, cmd
         | PortNamed raw -> {currentModel with PortName = raw},Cmd.none
         | PortChanged raw ->
             match System.Int32.TryParse raw with
@@ -104,21 +131,21 @@ module PorterImpl =
                 Browser.console.log(name,port)
                 {currentModel with Ports = ps; Error = None}, listenerCmd 0<s> port
         | PortCheckLoaded (Ok ps) ->
-            printfn "Port Check loaded"
-            currentModel.Ports
-            |> Map.tryFind ps.Port
-            |> function
-                | Some (name,_) ->
-                    let prts = addPort ps.Port name (Some ps) currentModel.Ports
-                    prts
-                    |> Map.toSeq
-                    |> Seq.map (fun (k,(v,_)) -> {Ident=k;Name=v})
-                    |> List.ofSeq
-                    |> storage.Set
-                    {currentModel with Ports = prts}, listenerCmd currentModel.Sleep ps.Port
-                | None -> {currentModel with Error = Some <| sprintf "PortCheck status returned for unloaded port:%i" ps.Port},Cmd.none
+                printfn "Port Check loaded"
+                currentModel.Ports
+                |> Map.tryFind ps.Port
+                |> function
+                    | Some (name,_) ->
+                        let prts = addPort ps.Port name (Some ps) currentModel.Ports
+                        prts
+                        |> Map.toSeq
+                        |> Seq.map (fun (k,(v,_)) -> {Ident=k;Name=v})
+                        |> List.ofSeq
+                        |> storage.Set
+                        {currentModel with Ports = prts}, if currentModel.Poll then listenerCmd currentModel.Sleep ps.Port else Cmd.none
+                    | None -> {currentModel with Error = Some <| sprintf "PortCheck status returned for unloaded port:%i" ps.Port},Cmd.none
         | PortCheckLoaded (Error (p,ex)) ->
-            {currentModel with Error = Some <| sprintf "%A" ex}, listenerCmd currentModel.Sleep p
+            {currentModel with Error = Some <| sprintf "%A" ex}, if currentModel.Poll then  listenerCmd currentModel.Sleep p else Cmd.none
 module Run =
     open Fable.Helpers.React
     open Fable.Helpers.React.Props
@@ -139,6 +166,7 @@ module Run =
                       Input.Props [ OnChange (fun ev -> dispatch (PortChanged !!ev.target?value))
                                     onKeyDown KeyCode.enter (fun _ -> dispatch portCheckMsg) ] ]
         Label.label [Label.CustomClass "error"] [ model.Error |> Option.defaultValue null |> str ]
+        pButton (if model.Poll then "Stop" else "Start") (fun _ -> dispatch (SetPoll <| not model.Poll))
         Container.container [] [
             table [ClassName "table table-striped"] [
                 thead [] [
@@ -167,7 +195,7 @@ module Run =
                                 | Some ps ->
                                     yield td [ if ps.IsOpen then yield ClassName "is-success" else yield ClassName "is-danger"] [str <| string ps.IsOpen]
                                     yield td [] [ str <| ps.When.ToLongTimeString() ]
-                                    yield td [ClassName "error"] [str <| string ps.Error]
+                                    yield td [ClassName "error"] [str <| string ps.ErrorMsg]
                                 | None ->
                                     yield td [] []
                                     yield td [] []

@@ -3,7 +3,7 @@ open System
 
 type Counter = { Value : int }
 
-type PingStatus = {Port:int;IsOpen:bool;Error:string;When:DateTime}
+type PingStatus = {Port:int;IsOpen:bool;ErrorMsg:string;When:DateTime}
 type PropertyWrap<'t>(fGetter,fSetter) =
     member __.Value
         with get():'t = fGetter()
@@ -24,3 +24,5 @@ module StringPatterns =
             |Some (true,x) -> Some x
             | _ -> None
 
+module Handshake =
+    let camelCasing = false

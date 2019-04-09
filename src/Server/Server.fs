@@ -27,9 +27,9 @@ let getPing port : Task<PingStatus> = task {
     printfn "Checking port %i" port
     try
         tcp.Connect("127.0.0.1", port)
-        return {Port=port;IsOpen=true;Error=null;When=DateTime.UtcNow}
+        return {Port=port;IsOpen=true;ErrorMsg=null;When=DateTime.UtcNow}
     with ex ->
-        return {Port=port;IsOpen=false;Error=ex.Message;When=DateTime.UtcNow}
+        return {Port=port;IsOpen=false;ErrorMsg=ex.Message;When=DateTime.UtcNow}
 
 }
 let webApp =
@@ -41,6 +41,7 @@ let webApp =
             | Ok (ParseInt port) ->
                 task{
                     let! pingResult = getPing port
+                    // let encoded = Thoth.Json.Net.Encode.Auto.toString(0,pingResult)
                     return! Successful.OK pingResult next ctx
                 }
             | Error ex ->

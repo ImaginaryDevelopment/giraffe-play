@@ -16,6 +16,14 @@ let onKeyDown keyCode action =
             action ev
     )
 module Controls =
+    let dButton txt =
+        Button.button
+            [
+                Button.IsFullWidth
+                Button.Disabled true
+            ]
+            [str txt]
+
     let pButton txt onClick =
         Button.button
             [ Button.IsFullWidth
