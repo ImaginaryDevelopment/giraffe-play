@@ -5,10 +5,13 @@
     </PropertyGroup>
     <ItemGroup>
         <Compile Include="..\Shared\Shared.fs" />
-        <Compile Include="P5/P5.fs"/>
-        <Compile Include="P5/001-starfield.fs"/>
-        <Compile Include="P5/136-perlinnoise.fs"/>
-        <Compile Include="P5/P5-routing.fs"/>
+        <Compile Include="AClientShared.fs"/>
+        <Compile Include="ViewApps/Counter.fs" />
+        <Compile Include="ViewApps/P5/P5.fs"/>
+        <Compile Include="ViewApps/P5/001-starfield.fs"/>
+        <Compile Include="ViewApps/P5/136-perlinnoise.fs"/>
+        <Compile Include="ViewApps/P5/P5-routing.fs"/>
+        <Compile Include="ViewApps/Porter.fs" />
         <Compile Include="Client.fs" />
     </ItemGroup>
     <Import Project="..\..\.paket\Paket.Restore.targets" />

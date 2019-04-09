@@ -18,6 +18,7 @@ type Model = {Index:string}
 
 type Msg =
     |Navigate of index:string
+
 module P5Impl =
 
     let init () : Model * Cmd<Msg> =
@@ -43,10 +44,11 @@ module Run =
     let ct index init link = {Index = index;Initializer=init;Link=link}
     let models = [
         ct "001-starfield" P5.Starfield.p5_001 (Some "17WoOqgXsRM")
+        //ct "002" P5.___ (Some "LG8ZK-rRkXo")
         ct "136-perlinnoise" P5.PerlinNoise.P5_136 (Some "ZI1dmHv3MeM")
     ]
 
-    let view model (dispatch:Msg->unit) =
+    let view (model:Model) (dispatch:Msg->unit) =
         let hadValue = initP5.IsValueCreated
         // initP5.Force()
         let isRevisit = Browser.window?index = model.Index
