@@ -27,9 +27,9 @@ let getPing port : Task<PingStatus> = task {
     printfn "Checking port %i" port
     try
         tcp.Connect("127.0.0.1", port)
-        return {Port=port;PortStatus="Open"}
+        return {Port=port;IsOpen=true;Error=null;When=DateTime.UtcNow}
     with ex ->
-        return {Port=port;PortStatus=ex.Message}
+        return {Port=port;IsOpen=false;Error=ex.Message;When=DateTime.UtcNow}
 
 }
 let webApp =

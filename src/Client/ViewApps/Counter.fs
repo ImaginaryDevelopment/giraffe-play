@@ -26,17 +26,17 @@ type Model = {Counter:Counter option;Message:string option; LoadError:string opt
 
 open Microsoft.FSharp.Core
 let initialCounter = fetchAs<Counter> "/api/init" (Decode.Auto.generateDecoder())
+let makeLoadCountCmd () =
+    Cmd.ofPromise
+        initialCounter
+        []
+        (Ok >> InitialCountLoaded)
+        (Error >> InitialCountLoaded)
 //consider loading up from localstorage any saved ports and listening for them
 let init () : Model * Cmd<Msg> =
 
-    let loadCountCmd =
-        Cmd.ofPromise
-            initialCounter
-            []
-            (Ok >> InitialCountLoaded)
-            (Error >> InitialCountLoaded)
     let initialModel = {Counter=None;Message=Some "Loading";LoadError=None}
-    initialModel, loadCountCmd
+    initialModel, makeLoadCountCmd()
 
 
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
@@ -53,6 +53,7 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     | _, InitialCountLoaded (Error e)->
         let nextModel = {Model.Zero with LoadError=Some e.Message}
         nextModel, Cmd.none
+    | None, _ -> currentModel, makeLoadCountCmd()
 
 
 module Components =
@@ -62,11 +63,21 @@ module Components =
 open Components
 let view (model : Model) (dispatch : Msg -> unit) =
   Container.container []
-      [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
+      [
+        yield Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
             [ Heading.h3 [] [ str ("Press buttons to manipulate counter: " + show model.Counter) ] ]
-        Columns.columns []
+        yield Columns.columns []
             [ Column.column [] [ pButton "-" (fun _ -> dispatch Decrement) ]
               Column.column [] [ pButton "+" (fun _ -> dispatch Increment) ] ]
+        match model.LoadError with
+        | Some e ->
+            yield Label.label [Label.CustomClass "error"] [str e]
+        | None -> ()
+        match model.Message with
+        | Some msg ->
+            yield Label.label [] [str msg]
+        | None -> ()
+
       ]
 
 

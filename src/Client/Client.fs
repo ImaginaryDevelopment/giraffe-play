@@ -16,40 +16,43 @@ open ClientShared.Controls
 // in this case, we are keeping track of a counter
 // we mark it as optional, because initially it will not be available from the client
 // the initial value will be requested from server
-type ClientMode =
-    |Loading of string
-    |CounterMode
-    |PortMode
-    |P5Mode
+[<RequireQualifiedAccess>]
+type ClientApp=
+    |Counter
+    |Porter
+    |P5
 
 type Loader =
     |PortLoader
     |P5Loader
 // The Msg type defines what events/actions can occur while the application is running
 // the state of the application changes *only* in reaction to these events
+[<RequireQualifiedAccess>]
+type AppMsg =
+    |Counter of CounterApp.Msg
+    |Porter of Porter.Msg
+    |P5 of P5Routing.Msg
 type Msg =
-    |CounterMsg of CounterApp.Msg
-    |PorterMsg of Porter.Msg
-    |InitializePorter
-    |P5Msg of P5Routing.Msg
-    |ChangeMode of ClientMode
+    |AppMsg of AppMsg
+    |ChangeMode of ClientApp
 
-type Model = { ClientMode:ClientMode; CounterModel: CounterApp.Model ; PorterModel:Porter.Model; P5Model: P5Routing.Model;LoadMap:Map<Loader,Cmd<Msg>>}
+type Model = { ClientMode:ClientApp; CounterModel: CounterApp.Model ; PorterModel:Porter.Model; P5Model: P5Routing.Model;LoadMap:Map<ClientApp,Cmd<Msg>>}
 
 
 // defines the initial state and initial command (= side-effect) of the application
 let init () : Model * Cmd<Msg> =
+    let cmdMap am = Cmd.map (am >> Msg.AppMsg)
     let p5Model,pCmd = P5Routing.P5Impl.init()
-    let cModel,cCmd = CounterApp.init()
     let portModel,prtCmd = Porter.PorterImpl.init()
+    let cModel,cmd = CounterApp.init()
     let initialModel =
         let loadMap = Map[
-            Loader.PortLoader,prtCmd |> Cmd.map Msg.PorterMsg
-            Loader.P5Loader, pCmd |> Cmd.map Msg.P5Msg
+            ClientApp.Porter,prtCmd |> cmdMap AppMsg.Porter
+            ClientApp.P5, pCmd |> cmdMap AppMsg.P5
         ]
-        {ClientMode=CounterMode; CounterModel = cModel ; PorterModel = portModel; P5Model=p5Model;LoadMap=loadMap}
+        {ClientMode=ClientApp.Counter; CounterModel = cModel ; PorterModel = portModel; P5Model=p5Model;LoadMap=loadMap}
     // initialModel, Cmd.batch [(loadCountCmd |> Cmd.map CounterMsg); cmd |> Cmd.map P5Msg]
-    initialModel, cCmd |> Cmd.map Msg.CounterMsg
+    initialModel, cmd |> cmdMap AppMsg.Counter
 
 
 
@@ -59,30 +62,35 @@ let init () : Model * Cmd<Msg> =
 let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
     let onIfP5ModeLeaving nextModel=
         match nextModel with
-        | {ClientMode=P5Mode} -> ()
+        | {ClientMode=ClientApp.P5} -> ()
         | _ ->
             match currentModel with
-            | {ClientMode=P5Mode} ->
+            | {ClientMode=ClientApp.P5} ->
                 P5Routing.P5Impl.cleanUp()
             | _ -> ()
         nextModel
     let nextModel,cmd =
         match msg with
         | ChangeMode mode ->
-            {currentModel with ClientMode=mode}, Cmd.none
-        | InitializePorter ->
-            let m,cmd = Porter.PorterImpl.init()
-            {currentModel with PorterModel = m; ClientMode=ClientMode.PortMode}, cmd |> Cmd.map Msg.PorterMsg
-        | Msg.PorterMsg msg ->
-            // ugh optional model is a problem
-            let model, cmd = Porter.PorterImpl.update msg currentModel.PorterModel
-            {currentModel with PorterModel=model}, cmd |> Cmd.map Msg.PorterMsg
-        | P5Msg msg ->
-            let model,cmd = P5Routing.P5Impl.update msg currentModel.P5Model
-            {currentModel with P5Model = model}, cmd |> Cmd.map Msg.P5Msg
-        | CounterMsg msg ->
-            let model,cmd = CounterApp.update msg currentModel.CounterModel
-            {currentModel with CounterModel = model}, cmd |> Cmd.map Msg.CounterMsg
+            currentModel.LoadMap
+            |> Map.tryFind mode
+            |> function
+                | Some cmd ->
+                    {currentModel with ClientMode=mode},cmd
+                | None -> {currentModel with ClientMode=mode}, Cmd.none
+        | Msg.AppMsg msg ->
+            let cmdMap am = Cmd.map (am >> Msg.AppMsg)
+            match msg with
+            | AppMsg.Porter msg ->
+                // ugh optional model is a problem
+                let model, cmd = Porter.PorterImpl.update msg currentModel.PorterModel
+                {currentModel with PorterModel=model}, cmd |> cmdMap AppMsg.Porter
+            | AppMsg.P5 msg ->
+                let model,cmd = P5Routing.P5Impl.update msg currentModel.P5Model
+                {currentModel with P5Model = model}, cmd |> cmdMap AppMsg.P5
+            | AppMsg.Counter msg ->
+                let model,cmd = CounterApp.update msg currentModel.CounterModel
+                {currentModel with CounterModel = model}, cmd |> cmdMap AppMsg.Counter
     let nextModel =
         (nextModel,[ onIfP5ModeLeaving])
         ||> List.fold(fun nextModel f ->
@@ -90,8 +98,6 @@ let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
         )
     nextModel, cmd
 
-
-open Elmish
 open Elmish.React
 
 open Fable.Helpers.React
@@ -112,7 +118,7 @@ let safeComponents =
            ]
 
     p [ ]
-        [ strong [] [ str "SAFE Template" ]
+        [ strong [] [ str "my Giraffe" ]
           str " powered by: "
           components ]
 
@@ -122,25 +128,23 @@ let loadingView text =
     ]
 
 let view (model : Model) (dispatch : Msg -> unit) =
+    let dispatchApp am = (am >> Msg.AppMsg >> dispatch)
+    let appView =
+          match model.ClientMode with
+          | ClientApp.Counter -> CounterApp.view model.CounterModel (dispatchApp AppMsg.Counter)
+          | ClientApp.Porter -> Porter.Run.view model.PorterModel (dispatchApp AppMsg.Porter)
+          | ClientApp.P5 -> P5Routing.Run.view model.P5Model (dispatchApp AppMsg.P5)
+
     div []
         [ Navbar.navbar [ Navbar.Color IsPrimary ]
-            [ Navbar.Item.div [ ]
-                [ Heading.h2 [] [ str "SAFE Template" ] ]
+            [ Navbar.Item.div [ ] [ Heading.h2 [] [ str "my giraffe" ] ]
               Navbar.Item.div [][
-                  div [] [ pButton "Home" (fun _ -> dispatch <| ChangeMode ClientMode.CounterMode)]
-                  div [] [ pButton "Porter" (fun _ -> dispatch <| ChangeMode ClientMode.PortMode)]
-                  div [] [ pButton "P5" (fun _ -> dispatch <| ChangeMode ClientMode.P5Mode )]
-
+                  div [] [ pButton "Counter" (fun _ -> dispatch <| ChangeMode ClientApp.Counter)]
+                  div [] [ pButton "Porter" (fun _ -> dispatch <| ChangeMode ClientApp.Porter)]
+                  div [] [ pButton "P5" (fun _ -> dispatch <| ChangeMode ClientApp.P5)]
               ]
             ]
-          (match model.ClientMode with
-            | CounterMode -> CounterApp.view model.CounterModel (Msg.CounterMsg>>dispatch)
-            | Loading text -> loadingView text
-            | PortMode -> Porter.Run.view model.PorterModel (Msg.PorterMsg>>dispatch)
-            | P5Mode ->
-                printfn "Running in P5 mode"
-                P5Routing.Run.view model.P5Model (P5Msg>>dispatch)
-          )
+          appView
           Footer.footer [ ]
                 [ Content.content [ Content.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ]
                     [ safeComponents ] ]
