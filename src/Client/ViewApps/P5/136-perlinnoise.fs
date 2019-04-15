@@ -6,23 +6,29 @@ open Fable.Import
 
 open P5
 
+// https://github.com/CodingTrain/website/blob/master/CodingChallenges/CC_136_Polar_Noise_Loop_1/Processing/CC_136_Polar_Noise_Loop_1/CC_136_Polar_Noise_Loop_1.pde
+// this doesn't match the repo, but the repo doesn't include the other things he added
 let P5_136() =
     let mutable slider = null
     let mutable phase = 0.0
     let mutable zoff = 0.0
-    let setup (sk:ISketch) =
+    let setSeed:SketchDelegate =
+        fun sk ->
+            sk.noiseSeed(System.Random().Next())
+
+    let setup (sk:ISketch) () =
         printfn "Setup is running"
         sk.createCanvas 600 600
         slider <- sk.createSlider(0.0,10.0,0.0,0.1)
         Browser.window?slider <- slider
         slider.value 5.0
-        sk.noiseSeed(System.Random().Next())
+        setSeed sk
         phase <- 0.0
         zoff <- 0.0
         sk.frameRate 15
         // slider <-
 
-    let draw(sk:ISketch) =
+    let draw (sk:ISketch) () =
         let cos = sk.cos
         let sin = sk.sin
         sk.background 0
@@ -48,6 +54,8 @@ let P5_136() =
         phase <- phase + 0.1
         // sk.noLoop()
     let mousePressed (sk:ISketch) =
-        printfn "Mouse pressed"
-        sk?mousePressed <- fun () -> sk.redraw()
+        Sketch.setOnMousePressed true sk (fun sk () ->
+            // he used redraw which doesn't appear to work, this does
+            setSeed sk
+        )
     SketchWrapper(setup, draw, Some mousePressed)

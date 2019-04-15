@@ -61,12 +61,12 @@ let p5_002() =
 
 
 
-    let setup (sk:ISketch) =
+    let setup (sk:ISketch) () =
         sk.createCanvas1 w h sk.WEBGL
         generateFirstBox sk
         sponge.Add b
         Sketch.setOnMousePressed true sk mousePressed
-    let draw (sk:ISketch) =
+    let draw (sk:ISketch) ()=
         sk.background 51
         sk.stroke 255
         sk.noFill()

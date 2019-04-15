@@ -109,6 +109,9 @@ module Sketch =
         sk?mousePressed<- f
     let setDraw sk (f:SketchEventDelegate) =
         sk?draw<-f sk
+    let setSetup sk (f:SketchEventDelegate) =
+        sk?setup<-f sk
+
 
 [<AllowNullLiteral>]
 type IP5 =
@@ -126,12 +129,12 @@ module P5Impl =
     let p5i = fromDynamic<IP5>("p5i")
 
 // wrapper to help manage instance mode https://github.com/processing/p5.js/wiki/Global-and-instance-mode
-type SketchWrapper(setup:ISketch -> unit, draw:ISketch-> unit, fOnce, ?target) =
+type SketchWrapper(setup:SketchEventDelegate, draw:SketchEventDelegate, fOnce, ?target) =
     let mutable sk = None
     let mutable p5Instance = None
     let f sketch =
-        sketch?draw <- fun () -> draw sketch
-        sketch?setup <- fun () -> setup sketch
+        Sketch.setDraw sketch draw
+        Sketch.setSetup sketch setup
         fOnce
         |> Option.iter(fun f ->
             f sketch
@@ -179,12 +182,12 @@ type SketchWrapper(setup:ISketch -> unit, draw:ISketch-> unit, fOnce, ?target) =
 module Sample =
 
     let P5_0 () =
-        let setup (sk:ISketch) =
+        let setup (sk:ISketch) () =
             printfn "Setup is running"
             sk.createCanvas 600 600
             sk.frameRate 15
 
-        let draw(sk:ISketch) =
+        let draw(sk:ISketch) () =
             sk.background 0
             sk.translate (sk.width / 2.0, sk.height / 2.0)
             sk.stroke 255
