@@ -43,11 +43,11 @@ let p5_001() =
     let stars = Array.zeroCreate count
 
     let mutable speed = 15.0
-    let setup (sk:ISketch) =
+    let setup (sk:ISketch) () =
         sk.createCanvas w h
         stars |> Seq.iteri(fun i _ ->stars.[i] <- (Star((fun () -> speed),w,h))
         )
-    let draw (sk:ISketch) =
+    let draw (sk:ISketch) () =
         speed <- sk.map(sk.mouseX, 0.0, float w, 0.0, 20.0)
         sk.background(0)
         sk.translate(float w / 2.0, float h / 2.0)
