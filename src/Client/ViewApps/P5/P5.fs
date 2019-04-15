@@ -17,11 +17,16 @@ module GlobalMode =
     let createCanvas (_:int) (_:int) : unit = jsNative
 type ICanvas =
     abstract member remove:unit -> unit
+type IPVector =
+    abstract member x:float
+    abstract member y:float
+    abstract member z:float
 
 [<AllowNullLiteral>]
 type ISketchCore =
     abstract member TWO_PI:float
     abstract member CLOSE:string
+    abstract member WEBGL:string
 
     abstract member canvas: ICanvas
     abstract member height: float with get,set
@@ -30,14 +35,21 @@ type ISketchCore =
     abstract member mouseY: float
 
     abstract member beginShape: unit -> unit
+    abstract member box:float -> unit
     abstract member cos:float -> float
     abstract member createCanvas: w:int -> h:int -> unit
+    [<Emit("$0.createCanvas($1,$2,$3)")>]
+    abstract member createCanvas1:w:int -> h:int -> mode:string -> unit
+    abstract member createVector : x:float -> y:float -> z:float -> IPVector
+
     abstract member background: color:int -> unit
     abstract member draw:unit -> unit
     abstract member endShape: unit -> unit
     abstract member endShape: string -> unit
     abstract member fill: color:int -> unit
+    abstract member fill: color:int*alpha:int -> unit
     abstract member frameRate : int -> unit
+    abstract member lights: unit -> unit
     abstract member line: x1:float*y1:float*x2:float*y2:float -> unit
     abstract member map: n:float * start1:float * stop1:float * start2:float * stop2:float -> float
     abstract member map: n:float * start1:float * stop1:float * start2:float * stop2:float * withinBounds:bool -> float
@@ -45,10 +57,21 @@ type ISketchCore =
     abstract member noise: x:float*y:float -> float
     abstract member noise: x:float*y:float*z:float -> float
     abstract member noiseSeed:int -> unit
+    abstract member pop:unit -> unit
+    // [<Obsolete("use pop")>]
+    // abstract member popMatrix:unit -> unit
+    abstract member push:unit -> unit
+    // [<Obsolete("use push")>]
+    // abstract member pushMatrix:unit -> unit
     abstract member rect: int -> int -> int -> int -> unit
     abstract member remove:unit->unit
+    abstract member rotateX: float -> unit
+    abstract member rotateY: float -> unit
+    abstract member rotateZ: float -> unit
     abstract member stroke: int -> unit
     abstract member translate: width:float * height:float -> unit
+    [<Emit("$0.translate($1,$2,$3)")>]
+    abstract member translate1: width:float -> height:float -> depth:float -> unit
 
     abstract member noFill: unit -> unit
     abstract member noLoop: unit -> unit
@@ -74,6 +97,18 @@ type ISketch =
         inherit ISketchCore
         inherit ISketchDom
     end
+type SketchEventDelegate = ISketch -> unit -> unit
+type SketchDelegate = ISketch -> unit
+module Sketch =
+
+    let setOnMousePressed debug sk (f:SketchEventDelegate) =
+        let inline f () =
+            if debug then
+                printfn "Mouse Pressed"
+            f sk ()
+        sk?mousePressed<- f
+    let setDraw sk (f:SketchEventDelegate) =
+        sk?draw<-f sk
 
 [<AllowNullLiteral>]
 type IP5 =

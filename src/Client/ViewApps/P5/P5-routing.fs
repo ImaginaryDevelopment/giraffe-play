@@ -33,7 +33,7 @@ module P5Impl =
         SketchWrapper.CleanUp()
         Browser.window?index <- null
 module Run =
-    type CodingTrain = {Index:string; Link:string option; Initializer:unit->SketchWrapper}
+    type CodingTrain = {Index:string; Link:string option; Initializer:(unit->SketchWrapper) option}
     let initP5 = lazy(
         let e = Browser.document.createElement("script")
         // s?type <- "text/javascript"
@@ -43,9 +43,9 @@ module Run =
     )
     let ct index init link = {Index = index;Initializer=init;Link=link}
     let models = [
-        ct "001-starfield" P5.Starfield.p5_001 (Some "17WoOqgXsRM")
-        //ct "002" P5.___ (Some "LG8ZK-rRkXo")
-        ct "136-perlinnoise" P5.PerlinNoise.P5_136 (Some "ZI1dmHv3MeM")
+        ct "001-starfield" (Some P5.P001_Starfield.p5_001) (Some "17WoOqgXsRM")
+        ct "002-mengersponge" (Some P5.P002_MengerSponge.p5_002) (Some "LG8ZK-rRkXo")
+        ct "136-perlinnoise" (Some P5.PerlinNoise.P5_136) (Some "ZI1dmHv3MeM")
     ]
 
     let view (model:Model) (dispatch:Msg->unit) =
@@ -65,7 +65,7 @@ module Run =
                 |> List.tryFind(fun x -> x.Index = i)
                 |> function
                     |Some x ->
-                        Some x.Initializer
+                        x.Initializer
                     | None -> None
             |> function
                 | None -> false,None
