@@ -15,18 +15,21 @@ open Shared.StringPatterns
 open ClientShared
 open System.Threading.Tasks
 open ClientShared.Controls
+open Fable.Import.HMR
 
 
 type Name = string
 type Ident = int
 type Port = {Name:Name option;Ident:Ident}
-type PortMap = Map<int,string option*PingStatus option>
+type PortHttp = {Status:string;IsOk:bool}
+type PortMap = Map<int,string option*PingStatus option*PortHttp option>
 
 type Msg =
     | PortNamed of string
     | PortChanged of string
     | PortCheck of name:string option
     | PortCheckLoaded of Result<PingStatus,Ident*exn>
+    | HttpCheckLoaded of Result<PortHttp,exn> * Ident
     | PortInitMerge of Port list
     | PortInitFail of exn
     | SetPoll of bool
@@ -38,12 +41,10 @@ module PorterImpl =
     open Fable.PowerPack
     open Microsoft.FSharp.Core
     let listenerCheck sleep port:JS.Promise<PingStatus> =
-        printfn "making a promise"
         promise {
             if sleep > 0<s> then
                 printfn "Sleeper sleeping for ident:%i (%i second(s))" port sleep
                 do! Promise.sleep (int sleep * 1000)
-            printfn "Fetching!"
             let url = sprintf "/api/ping?port=%i" port
             // let! result = fetchAs<PingStatus> url (Decode.Auto.generateDecoder<PingStatus>(isCamelCase=false)) []
             // return result
@@ -55,9 +56,20 @@ module PorterImpl =
             let cast = decoded :?> PingStatus
             return cast
         }
+    let httpCheck sleep port:JS.Promise<PortHttp> =
+        promise {
+            if sleep > 0<s> then
+                printfn "Sleeper sleeping for ident:%i (%i second(s))" port sleep
+                do! Promise.sleep (int sleep * 1000)
+            let url = sprintf "http://localhost:%i" port
+            let! result = Fetch.fetch url []
+            if result.Ok then
+                return {Status="active";IsOk=true}
+            else return {Status=result.StatusText;IsOk=false}
+        }
     let storage = Storage.store<Port list>("Porter.PorterImpl.watchKey")
-    let addPort port name ps (m:PortMap) = m |> Map.add port (name |> Option.bind Option.ofValueString,ps)
-    let inline foldPort m port (name,ps) = addPort port name ps m
+    let addPort port name ps hs (m:PortMap) = m |> Map.add port (name |> Option.bind Option.ofValueString,ps,hs)
+    let inline foldPort m port (name,ps) = addPort port name ps None m
     let inline insertPorts m port =
         foldPort m port.Ident (port.Name,None)
 
@@ -88,8 +100,9 @@ module PorterImpl =
 
 
     let update (msg : Msg) (currentModel : Model) : Model * Cmd<Msg> =
-        printfn "update fired! %A" msg
         let listenerCmd sleep port = Cmd.ofPromise (listenerCheck sleep) port (Ok >> PortCheckLoaded) (fun e -> PortCheckLoaded(Error(port,e)))
+        let httpCmd sleep port = Cmd.ofPromise (httpCheck sleep) port (Ok >> fun x -> HttpCheckLoaded(x,port)) (Error >> (fun x -> HttpCheckLoaded(x,port)))
+
         let listenCurrent forcePing model =
             let batchListen ports = Cmd.batch (ports |> Seq.map (listenerCmd model.Sleep))
             let shouldPing = model.Poll || forcePing
@@ -102,17 +115,41 @@ module PorterImpl =
             else Cmd.none
 
         match msg with
+        | HttpCheckLoaded (Ok hs,ident) ->
+            let cmd = if currentModel.Poll then httpCmd currentModel.Sleep ident else Cmd.none
+            currentModel.Ports
+            |> Map.tryFind ident
+            |> function
+                |Some (name,ps,_) ->
+                    let nextMap = currentModel.Ports |> addPort ident name ps (Some hs)
+                    {currentModel with Ports=nextMap; Error=None}, cmd
+                |None ->
+                    let nextMap = currentModel.Ports |> addPort ident None None (Some hs)
+                    {currentModel with Ports=nextMap; Error=None}, cmd
+        |HttpCheckLoaded (Error e,ident) ->
+            let hs = {Status=e.Message;IsOk=false}
+            let cmd = if currentModel.Poll then listenerCmd currentModel.Sleep ident else Cmd.none
+            currentModel.Ports
+            |> Map.tryFind ident
+            |> function
+                |Some (name,ps,_) ->
+                    let nextMap = currentModel.Ports |> addPort ident name ps (Some hs)
+                    {currentModel with Ports=nextMap; Error=None}, cmd
+                |None ->
+                    let nextMap = currentModel.Ports |> addPort ident None None (Some hs)
+                    {currentModel with Ports=nextMap; Error=None}, cmd
+
         | SetPoll(poll) ->
             match currentModel.Poll, poll with
             | false,false
             | true, _ ->
                 {currentModel with Poll=false},Cmd.none
             | false, true ->
-                let nextModel = {currentModel with Poll=true}
+                let nextModel = {currentModel with Poll=true;Error = None}
                 nextModel, listenCurrent false nextModel
         | PortInitFail x ->
             printfn "Merging ports failed"
-            {currentModel with Error=Some x.Message },Cmd.none
+            {currentModel with Error=Some <| sprintf "PortInitFail: %s" x.Message },Cmd.none
         | PortInitMerge x ->
             printfn "Merging ports"
             let ps =
@@ -132,7 +169,7 @@ module PorterImpl =
             | None ->
                 {currentModel with Error=Some "No valid port to check"}, Cmd.none
             | Some port ->
-                let ps = currentModel.Ports |> addPort port (name |> Option.bind Option.ofValueString) None
+                let ps = currentModel.Ports |> addPort port (name |> Option.bind Option.ofValueString) None None
                 Browser.console.log(name,port)
                 {currentModel with Ports = ps; Error = None}, listenerCmd 0<s> port
         | PortCheckLoaded (Ok ps) ->
@@ -140,17 +177,24 @@ module PorterImpl =
                 currentModel.Ports
                 |> Map.tryFind ps.Port
                 |> function
-                    | Some (name,_) ->
-                        let prts = addPort ps.Port name (Some ps) currentModel.Ports
+                    | Some (name,_,hs) ->
+                        let prts = addPort ps.Port name (Some ps) (if ps.IsOpen then hs else None) currentModel.Ports
                         prts
                         |> Map.toSeq
-                        |> Seq.map (fun (k,(v,_)) -> {Ident=k;Name=v})
+                        |> Seq.map (fun (k,(v,_,_)) -> {Ident=k;Name=v})
                         |> List.ofSeq
                         |> storage.Set
-                        {currentModel with Ports = prts}, if currentModel.Poll then listenerCmd currentModel.Sleep ps.Port else Cmd.none
+                        let cmd =
+                            if currentModel.Poll then
+                                if ps.IsOpen then
+                                    httpCmd currentModel.Sleep ps.Port
+                                else
+                                    listenerCmd currentModel.Sleep ps.Port
+                            else Cmd.none
+                        {currentModel with Ports = prts;Error=None}, cmd
                     | None -> {currentModel with Error = Some <| sprintf "PortCheck status returned for unloaded port:%i" ps.Port},Cmd.none
         | PortCheckLoaded (Error (p,ex)) ->
-            {currentModel with Error = Some <| sprintf "%A" ex}, if currentModel.Poll then  listenerCmd currentModel.Sleep p else Cmd.none
+            {currentModel with Error = Some <| sprintf "%A" ex}, if currentModel.Poll then listenerCmd currentModel.Sleep p else Cmd.none
 module Run =
     open Fable.Helpers.React
     open Fable.Helpers.React.Props
@@ -180,15 +224,17 @@ module Run =
                         th [] [str "Name"]
                         th [] [str "Port"]
                         th [] [str "Open"]
+                        th [] [str "IsHttp"]
                         th [] [str "Updated"]
                         th [] [str ""]
                     ]
                 ]
                 tbody [] [
+                    let rgPivot = (function | true -> "is-success" |false -> "is-danger") >> ClassName
                     yield!
                         model.Ports
                         |> Map.toSeq
-                        |> Seq.map(fun (port,(name,ps))->
+                        |> Seq.map(fun (port,(name,ps,hs))->
                             tr[] [
                                 yield td [] [str ""]
                                 match name with
@@ -198,10 +244,16 @@ module Run =
                                 yield td [] [ !!port]
                                 match ps with
                                 | Some ps ->
-                                    yield td [ if ps.IsOpen then yield ClassName "is-success" else yield ClassName "is-danger"] [str <| string ps.IsOpen]
-                                    yield td [] [ str <|  string ps.When ]
+                                    yield td [ rgPivot ps.IsOpen] [str <| string ps.IsOpen]
+                                    match hs with
+                                    | Some hs ->
+                                        yield td [rgPivot hs.IsOk ] [str hs.Status]
+                                    |None ->
+                                        yield td [] []
+                                    yield td [] [ str <|  (let text = string ps.When in (if text.Length < 21 then text else text.Substring(0,21)))]
                                     yield td [ClassName "error"] [str <| string ps.ErrorMsg]
                                 | None ->
+                                    yield td [] []
                                     yield td [] []
                                     yield td [] []
                                     yield td [] []

@@ -15,7 +15,6 @@ open Shared
 open Shared.StringPatterns
 open System.Net.Sockets
 
-
 let tryGetEnv = System.Environment.GetEnvironmentVariable >> function null | "" -> None | x -> Some x
 
 let publicPath = Path.GetFullPath "../Client/public"
@@ -33,7 +32,7 @@ let getPing port : Task<PingStatus> = task {
 
 }
 let webApp =
-    let printPart msg:HttpHandler= warbler (fun _ next ctx -> printfn "%s" msg; Task.FromResult None )
+    let printPart msg:HttpHandler= warbler (fun _ next _ctx -> printfn "%s" msg; Task.FromResult None )
     let pingHandler:HttpHandler =
         fun next ctx ->
             printfn "checking for port"
@@ -41,8 +40,10 @@ let webApp =
             | Ok (ParseInt port) ->
                 task{
                     let! pingResult = getPing port
-                    // let encoded = Thoth.Json.Net.Encode.Auto.toString(0,pingResult)
-                    return! Successful.OK pingResult next ctx
+                    try
+                        return! Successful.OK pingResult next ctx
+                    with ex ->
+                        return! ServerErrors.INTERNAL_ERROR ex.Message next ctx
                 }
             | Error ex ->
                 ServerErrors.INTERNAL_ERROR ex next ctx
